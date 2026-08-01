@@ -124,7 +124,7 @@ SplashSub.Name = "SplashSub"
 SplashSub.Size = UDim2.new(0, 500, 0, 30)
 SplashSub.Position = UDim2.new(0.5, -250, 0.5, 35)
 SplashSub.BackgroundTransparency = 1
-SplashSub.Text = "Brookhaven RP Loaded"
+SplashSub.Text = "Brookhaven RP Extended Edition Loaded"
 SplashSub.TextColor3 = Color3.fromRGB(160, 160, 180)
 SplashSub.TextTransparency = 1
 SplashSub.TextSize = 13
@@ -724,11 +724,47 @@ local miscPage       = createTab("Misc", "🔧")
 brookhavenPage:AddButton("Auto Rob Bank Vault", function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
-        -- Телепорт к сейфу
         char.HumanoidRootPart.CFrame = CFrame.new(-25, 4, -460)
         task.wait(0.5)
-        -- Попытка взорвать или забрать деньги при взаимодействии
         firetouchinterest(char.HumanoidRootPart, Workspace:FindFirstChild("VaultDoor", true) or char.HumanoidRootPart, 0)
+    end
+end)
+
+brookhavenPage:AddButton("Auto Claim Vacant House", function()
+    for _, house in ipairs(Workspace:GetDescendants()) do
+        if (house.Name == "HouseEstate" or house.Name == "Vacant") and house:IsA("BasePart") then
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = house.CFrame * CFrame.new(0, 5, 0)
+                break
+            end
+        end
+    end
+end)
+
+local rainbowCarLoop = nil
+brookhavenPage:AddToggle("Rainbow Vehicle Paint", false, function(state)
+    if state then
+        rainbowCarLoop = task.spawn(function()
+            local hue = 0
+            while true do
+                hue = (hue + 0.01) % 1
+                local col = Color3.fromHSV(hue, 1, 1)
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                    local seat = LocalPlayer.Character.Humanoid.SeatPart
+                    if seat and seat.Parent then
+                        for _, part in ipairs(seat.Parent:GetDescendants()) do
+                            if part:IsA("BasePart") and part.Name ~= "Seat" then
+                                part.Color = col
+                            end
+                        end
+                    end
+                end
+                task.wait(0.05)
+            end
+        end)
+        table.insert(activeLoops, rainbowCarLoop)
+    else
+        if rainbowCarLoop then task.cancel(rainbowCarLoop) end
     end
 end)
 
@@ -787,6 +823,17 @@ brookhavenPage:AddButton("TP inside Nearest House Safe", function()
     end
 end)
 
+brookhavenPage:AddButton("Bring All World Items / Tools", function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        for _, v in ipairs(Workspace:GetDescendants()) do
+            if v:IsA("TouchTransmitter") and v.Parent then
+                pcall(function() firetouchinterest(char.HumanoidRootPart, v.Parent, 0) end)
+            end
+        end
+    end
+end)
+
 -- ==================== VISUALS ==================== --
 
 local playerHighlights = {}
@@ -805,6 +852,33 @@ visualsPage:AddToggle("Player ESP", false, function(state)
     else
         for _, hl in ipairs(playerHighlights) do if hl then hl:Destroy() end end
         playerHighlights = {}
+    end
+end)
+
+local chamsList = {}
+visualsPage:AddToggle("Chams (Wallhack)", false, function(state)
+    if state then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                for _, part in ipairs(plr.Character:GetChildren()) do
+                    if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                        local box = Instance.new("BoxHandleAdornment")
+                        box.Name = "ThoriumChams"
+                        box.Size = part.Size
+                        box.Color3 = Color3.fromRGB(108, 92, 231)
+                        box.AlwaysOnTop = true
+                        box.ZIndex = 5
+                        box.Adornee = part
+                        box.Transparency = 0.4
+                        box.Parent = part
+                        table.insert(chamsList, box)
+                    end
+                end
+            end
+        end
+    else
+        for _, ch in ipairs(chamsList) do if ch then ch:Destroy() end end
+        chamsList = {}
     end
 end)
 
@@ -838,6 +912,10 @@ visualsPage:AddToggle("Name Tags", false, function(state)
     end
 end)
 
+visualsPage:AddSlider("Time of Day (Clock)", 0, 24, 14, function(val)
+    Lighting.ClockTime = val
+end)
+
 local originalAmbient = Lighting.Ambient
 visualsPage:AddToggle("Fullbright", false, function(state)
     Lighting.Ambient = state and Color3.fromRGB(255, 255, 255) or originalAmbient
@@ -846,6 +924,10 @@ end)
 local origFogEnd = Lighting.FogEnd
 visualsPage:AddToggle("No Fog", false, function(state)
     Lighting.FogEnd = state and 9e9 or origFogEnd
+end)
+
+visualsPage:AddToggle("Disable Global Shadows", false, function(state)
+    Lighting.GlobalShadows = not state
 end)
 
 local crosshairFrame = nil
@@ -894,6 +976,25 @@ end)
 
 movementPage:AddSlider("Jump Power", 50, 250, 50, function(val)
     currentJumpPower = val
+end)
+
+local tpWalkSpeed = 1
+local tpWalkConn = nil
+movementPage:AddSlider("TP Walk Multiplier", 1, 10, 1, function(val) tpWalkSpeed = val end)
+movementPage:AddToggle("TP Walk (Bypass)", false, true, function(state)
+    if state then
+        tpWalkConn = AddConnection(RunService.RenderStepped:Connect(function(delta)
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") and char:FindFirstChild("Humanoid") then
+                local hum = char.Humanoid
+                if hum.MoveDirection.Magnitude > 0 then
+                    char.HumanoidRootPart.CFrame += hum.MoveDirection * (tpWalkSpeed * delta * 30)
+                end
+            end
+        end))
+    else
+        if tpWalkConn then tpWalkConn:Disconnect() end
+    end
 end)
 
 local flying = false
@@ -996,6 +1097,36 @@ movementPage:AddToggle("Spinbot", false, true, function(state)
     end
 end)
 
+local floatLoop = nil
+movementPage:AddToggle("Air Walk / Float", false, function(state)
+    if state then
+        floatLoop = task.spawn(function()
+            while true do
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = LocalPlayer.Character.HumanoidRootPart
+                    hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)
+                end
+                task.wait()
+            end
+        end)
+        table.insert(activeLoops, floatLoop)
+    else
+        if floatLoop then task.cancel(floatLoop) end
+    end
+end)
+
+movementPage:AddButton("Give TP Tool", function()
+    local tool = Instance.new("Tool")
+    tool.Name = "Thorium TP Tool"
+    tool.RequiresHandle = false
+    tool.Activated:Connect(function()
+        if Mouse and Mouse.Hit and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+        end
+    end)
+    tool.Parent = LocalPlayer:WaitForChild("Backpack")
+end)
+
 local originalGravity = Workspace.Gravity
 movementPage:AddToggle("Low Gravity", false, function(state)
     Workspace.Gravity = state and 35 or originalGravity
@@ -1010,7 +1141,13 @@ local locations = {
     ["Daycare"] = Vector3.new(220, 4, -130),
     ["Airport"] = Vector3.new(260, 4, -750),
     ["Arcade / Cinema"] = Vector3.new(-120, 4, 180),
-    ["Spawn / Center"] = Vector3.new(0, 5, 0)
+    ["Spawn / Center"] = Vector3.new(0, 5, 0),
+    ["Military Base"] = Vector3.new(180, 4, -480),
+    ["Gas Station"] = Vector3.new(-190, 4, 290),
+    ["School"] = Vector3.new(-330, 4, -200),
+    ["Cemetery"] = Vector3.new(80, 4, 310),
+    ["Secret Bunker"] = Vector3.new(70, -30, -110),
+    ["Fire Station"] = Vector3.new(-150, 4, -80)
 }
 
 for name, pos in pairs(locations) do
@@ -1053,6 +1190,37 @@ automationPage:AddButton("FPS Booster", function()
     Lighting.GlobalShadows = false
 end)
 
+automationPage:AddButton("Remove Blur & Effects", function()
+    for _, v in ipairs(Lighting:GetChildren()) do
+        if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("Atmosphere") or v:IsA("DepthOfFieldEffect") then
+            if v.Name ~= "ThoriumUIBlur" then v:Destroy() end
+        end
+    end
+    Lighting.FogEnd = 9e9
+end)
+
+local autoRobSafesLoop = nil
+automationPage:AddToggle("Auto Rob All Safes (Loop)", false, true, function(state)
+    if state then
+        autoRobSafesLoop = task.spawn(function()
+            while true do
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj.Name == "Safe" and obj:IsA("BasePart") then
+                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = obj.CFrame * CFrame.new(0, 0, 3)
+                            task.wait(1.5)
+                        end
+                    end
+                end
+                task.wait(6)
+            end
+        end)
+        table.insert(activeLoops, autoRobSafesLoop)
+    else
+        if autoRobSafesLoop then task.cancel(autoRobSafesLoop) end
+    end
+end)
+
 local xrayEnabled = false
 automationPage:AddToggle("Wall X-Ray", false, function(state)
     xrayEnabled = state
@@ -1082,24 +1250,19 @@ miscPage:AddToggle("Trusted Mode", false, function(state)
     UpdateModeStatus(state)
 end)
 
--- ФУНКЦИЯ UNLOAD (ПОЛНАЯ ВЫГРУЗКА СКРИПТА)
 miscPage:AddButton("Unload ThoriumLib", function()
-    -- Отмена гетов
     getgenv().ThoriumLib_Loaded = nil
 
-    -- Отключение всех activeConnections
     for _, conn in ipairs(activeConnections) do
         if conn then pcall(function() conn:Disconnect() end) end
     end
     activeConnections = {}
 
-    -- Отмена activeLoops
     for _, loop in ipairs(activeLoops) do
         if loop then pcall(function() task.cancel(loop) end) end
     end
     activeLoops = {}
 
-    -- Сброс настроек
     pcall(function()
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
             local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -1113,7 +1276,6 @@ miscPage:AddButton("Unload ThoriumLib", function()
         Workspace.CurrentCamera.FieldOfView = 70
     end)
 
-    -- Удаление интерфейса
     if UIBlur then UIBlur:Destroy() end
     if ScreenGui then ScreenGui:Destroy() end
     warn("[ThoriumLib] Успешно выгружен из игры.")
@@ -1157,6 +1319,10 @@ miscPage:AddButton("Copy Job ID to Clipboard", function()
     end
 end)
 
+miscPage:AddButton("Rejoin Same Server", function()
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+end)
+
 miscPage:AddButton("Server Hop", function()
     local api = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
     local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet(api)) end)
@@ -1167,6 +1333,12 @@ miscPage:AddButton("Server Hop", function()
                 break
             end
         end
+    end
+end)
+
+miscPage:AddButton("Reset / Suicide Character", function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.Health = 0
     end
 end)
 
